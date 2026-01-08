@@ -1,25 +1,24 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-// 1. Define routes that do NOT require login
+// 1. Add the callback to the public route list
 const isPublicRoute = createRouteMatcher([
   '/authn(.*)', 
   '/', 
+  '/authn/sso-callback(.*)' // Critical: allow this to process
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
   const { userId } = await auth();
 
-  // 2. If the user is NOT logged in and trying to access a private route
+  // 2. Protect private routes
   if (!userId && !isPublicRoute(req)) {
-    // Redirect them to the login page
-    const signInUrl = new URL('/authn', req.url);
-    return NextResponse.redirect(signInUrl);
+    return NextResponse.redirect(new URL('/authn', req.url));
   }
 
-  // 3. If the user IS logged in and trying to access the login page
-  if (userId && isPublicRoute(req) && req.nextUrl.pathname.startsWith('/authn')) {
-    // Redirect them to the dashboard
+  // 3. Prevent logged-in users from seeing the login page
+  // ONLY redirect if they are logged in AND on the base /authn page
+  if (userId && req.nextUrl.pathname === '/authn') {
     return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 

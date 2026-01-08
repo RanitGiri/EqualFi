@@ -1,18 +1,19 @@
 'use client'
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Shield, Zap, TrendingUp, Lock, Check } from 'lucide-react'
-import { useSignIn, useSignUp } from '@clerk/nextjs'
+import { useSignIn, useSignUp, useAuth, useClerk } from '@clerk/nextjs'
 import { useRouter } from 'next/navigation'
 
 function LoginSignupPage() {
   const router = useRouter()
-  const { signIn, isLoaded: signInLoaded } = useSignIn()
-  const { signUp, isLoaded: signUpLoaded } = useSignUp()
+  const { isSignedIn, isLoaded: authLoaded } = useAuth()
+  const clerk = useClerk()
+  const { signIn, isLoaded: signInLoaded, setActive: setSignInActive } = useSignIn()
+  const { signUp, isLoaded: signUpLoaded, setActive: setSignUpActive } = useSignUp()
+  
   const [verificationCode, setVerificationCode] = useState('')
-const [needsVerification, setNeedsVerification] = useState(false)
-
-
+  const [needsVerification, setNeedsVerification] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
@@ -20,6 +21,16 @@ const [needsVerification, setNeedsVerification] = useState(false)
   const [isLogin, setIsLogin] = useState(true)
   const [activeFeature, setActiveFeature] = useState(0)
   const [particlePositions, setParticlePositions] = useState([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [debugInfo, setDebugInfo] = useState('')
+
+  // Redirect if already signed in
+  useEffect(() => {
+    if (authLoaded && isSignedIn) {
+      console.log('User is signed in, redirecting...')
+      window.location.href = '/dashboard'
+    }
+  }, [isSignedIn, authLoaded])
 
   const features = [
     {
@@ -54,18 +65,22 @@ const [needsVerification, setNeedsVerification] = useState(false)
     Apple: 'oauth_apple',
   }
 
-const oauthLogin = (strategy) => {
-  if (!signIn || !strategy) return;
-  
-  signIn.authenticateWithRedirect({
-    strategy,
-    // This MUST match the folder structure we created in Step 2
-    redirectUrl: '/authn/sso-callback',
-    redirectUrlComplete: '/dashboard',
-  });
-};
+  const oauthLogin = async (strategy) => {
+    if (!signIn || !strategy) return;
+    
+    try {
+      await signIn.authenticateWithRedirect({
+        strategy,
+        redirectUrl: '/authn/sso-callback',
+        redirectUrlComplete: '/dashboard',
+      });
+    } catch (err) {
+      console.error('OAuth error:', err)
+      setError('Authentication failed. Please try again.')
+    }
+  };
 
-  React.useEffect(() => {
+  useEffect(() => {
     const particles = Array.from({ length: 30 }, () => ({
       x: Math.random() * 100,
       y: Math.random() * 100,
@@ -75,16 +90,19 @@ const oauthLogin = (strategy) => {
     setParticlePositions(particles)
   }, [])
 
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setActiveFeature((prev) => (prev + 1) % features.length)
     }, 4000)
     return () => clearInterval(interval)
   }, [])
 
-  const handleLogin = async () => {
-    if (!signInLoaded) return
+  const handleLogin = async (e) => {
+    e?.preventDefault()
+    if (!signInLoaded || isLoading) return
+    
     setError('')
+    setIsLoading(true)
 
     try {
       const result = await signIn.create({
@@ -92,55 +110,150 @@ const oauthLogin = (strategy) => {
         password,
       })
 
+      console.log('Login result:', result)
+
       if (result.status === 'complete') {
-        router.push('/dashboard')
+        await setSignInActive({ session: result.createdSessionId })
+        console.log('Session activated, redirecting...')
+        
+        // Use clerk's navigation
+        await clerk.setActive({ session: result.createdSessionId })
+        
+        // Small delay then hard redirect
+        setTimeout(() => {
+          window.location.href = '/dashboard'
+        }, 500)
+      } else {
+        setError('Login incomplete. Please try again.')
       }
     } catch (err) {
-      setError(err.errors?.[0]?.message || 'Login failed')
+      console.error('Login error:', err)
+      setError(err.errors?.[0]?.message || err.errors?.[0]?.longMessage || 'Invalid email or password.')
+    } finally {
+      setIsLoading(false)
     }
   }
 
-const handleSignup = async () => {
-  if (!signUpLoaded) return
-  setError('')
+  const handleSignup = async (e) => {
+    e?.preventDefault()
+    if (!signUpLoaded || isLoading) return
+    
+    setError('')
+    setIsLoading(true)
 
-  try {
-    await signUp.create({
-      emailAddress: email,
-      password,
-      firstName: fullName.split(' ')[0],
-      lastName: fullName.split(' ').slice(1).join(' ') || '',
-    })
-
-    await signUp.prepareEmailAddressVerification({
-      strategy: 'email_code',
-    })
-
-    setNeedsVerification(true)
-  } catch (err) {
-    setError(err.errors?.[0]?.message || 'Signup failed')
-  }
-}
-const handleVerify = async () => {
-  if (!signUpLoaded) return
-
-  try {
-    const result = await signUp.attemptEmailAddressVerification({
-      code: verificationCode,
-    })
-
-    if (result.status === 'complete') {
-      await signUp.setActive({
-        session: result.createdSessionId,
+    try {
+      const result = await signUp.create({
+        emailAddress: email,
+        password,
+        firstName: fullName.split(' ')[0] || 'User',
+        lastName: fullName.split(' ').slice(1).join(' ') || '',
       })
 
-      router.push('/dashboard')
-    }
-  } catch (err) {
-    setError(err.errors?.[0]?.message || 'Verification failed')
-  }
-}
+      console.log('Signup result:', result)
 
+      await signUp.prepareEmailAddressVerification({
+        strategy: 'email_code',
+      })
+
+      setNeedsVerification(true)
+      setError('')
+      setDebugInfo(`Verification email sent to ${email}`)
+    } catch (err) {
+      console.error('Signup error:', err)
+      setError(err.errors?.[0]?.message || err.errors?.[0]?.longMessage || 'Signup failed. Please try again.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleVerify = async (e) => {
+    e?.preventDefault()
+    if (!signUpLoaded || isLoading) return
+    
+    setError('')
+    setDebugInfo('')
+    setIsLoading(true)
+
+    try {
+      console.log('Attempting verification with code:', verificationCode)
+      
+      const completeSignUp = await signUp.attemptEmailAddressVerification({
+        code: verificationCode,
+      })
+
+      console.log('Full verification result:', JSON.stringify(completeSignUp, null, 2))
+      setDebugInfo(`Status: ${completeSignUp.status}`)
+
+      if (completeSignUp.status === 'complete') {
+        console.log('Verification complete!')
+        console.log('Created session ID:', completeSignUp.createdSessionId)
+        
+        if (!completeSignUp.createdSessionId) {
+          console.error('No session ID in response!')
+          setError('Session creation failed. Please try logging in instead.')
+          setIsLoading(false)
+          return
+        }
+
+        // Method 1: Use clerk directly
+        console.log('Setting active session via clerk...')
+        await clerk.setActive({ session: completeSignUp.createdSessionId })
+        
+        console.log('Waiting for session to sync...')
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        
+        // Check if we're now signed in
+        console.log('Auth state after setActive:', { 
+          isSignedIn: clerk.session !== null,
+          sessionId: clerk.session?.id
+        })
+        
+        if (clerk.session) {
+          console.log('Session confirmed, redirecting...')
+          window.location.href = '/dashboard'
+        } else {
+          console.error('Session not found after setActive!')
+          setError('Authentication succeeded but session not created. Please try logging in.')
+          
+          // Try to log them in automatically
+          setTimeout(() => {
+            setNeedsVerification(false)
+            setIsLogin(true)
+            setError('Please log in with your new account.')
+          }, 2000)
+        }
+      } else if (completeSignUp.status === 'missing_requirements') {
+        setError('Additional information required. Status: ' + completeSignUp.status)
+        console.log('Missing requirements:', completeSignUp)
+      } else {
+        setError(`Verification status: ${completeSignUp.status}. Please try again.`)
+        console.log('Unexpected status:', completeSignUp.status)
+      }
+    } catch (err) {
+      console.error('Verification error:', err)
+      console.error('Error details:', JSON.stringify(err, null, 2))
+      setError(err.errors?.[0]?.message || err.errors?.[0]?.longMessage || 'Invalid verification code.')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  // Show loading while checking auth status
+  if (!authLoaded) {
+    return (
+      <div className="min-h-screen bg-[#010514] flex items-center justify-center">
+        <div className="text-[#78a0ff] text-xl">Loading...</div>
+      </div>
+    )
+  }
+
+  if (isSignedIn) {
+    return (
+      <div className="min-h-screen bg-[#010514] flex items-center justify-center">
+        <div className="text-[#78a0ff] text-xl">Redirecting to dashboard...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen bg-[#010514] flex overflow-hidden relative pt-10">
@@ -163,46 +276,115 @@ const handleVerify = async () => {
             <p className="text-[#a0b0d0] text-sm">Equal Access to Financial Opportunities</p>
           </motion.div>
 
-          <div className="flex gap-2 mb-8 bg-[#0f1a2e] p-1 rounded-xl">
-            <button
-              onClick={() => setIsLogin(true)}
-              className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-300 ${
-                isLogin
-                  ? 'bg-[#78a0ff] text-white shadow-[0_0_20px_rgba(120,160,255,0.4)]'
-                  : 'text-[#a0b0d0] hover:text-white'
-              }`}
+          {!needsVerification && (
+            <div className="flex gap-2 mb-8 bg-[#0f1a2e] p-1 rounded-xl">
+              <button
+                onClick={() => {
+                  setIsLogin(true)
+                  setError('')
+                  setDebugInfo('')
+                }}
+                className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-300 ${
+                  isLogin
+                    ? 'bg-[#78a0ff] text-white shadow-[0_0_20px_rgba(120,160,255,0.4)]'
+                    : 'text-[#a0b0d0] hover:text-white'
+                }`}
+              >
+                Login
+              </button>
+              <button
+                onClick={() => {
+                  setIsLogin(false)
+                  setError('')
+                  setDebugInfo('')
+                }}
+                className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-300 ${
+                  !isLogin
+                    ? 'bg-[#78a0ff] text-white shadow-[0_0_20px_rgba(120,160,255,0.4)]'
+                    : 'text-[#a0b0d0] hover:text-white'
+                }`}
+              >
+                Sign Up
+              </button>
+            </div>
+          )}
+
+          {debugInfo && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-blue-400 text-sm"
             >
-              Login
-            </button>
-            <button
-              onClick={() => setIsLogin(false)}
-              className={`flex-1 py-3 rounded-lg font-semibold transition-all duration-300 ${
-                !isLogin
-                  ? 'bg-[#78a0ff] text-white shadow-[0_0_20px_rgba(120,160,255,0.4)]'
-                  : 'text-[#a0b0d0] hover:text-white'
-              }`}
-            >
-              Sign Up
-            </button>
-          </div>
+              {debugInfo}
+            </motion.div>
+          )}
 
           {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm"
+            >
               {error}
-            </div>
+            </motion.div>
           )}
 
           <AnimatePresence mode="wait">
             <motion.div
-              key={isLogin ? 'login' : 'signup'}
+              key={needsVerification ? 'verify' : (isLogin ? 'login' : 'signup')}
               initial={{ opacity: 0, x: isLogin ? -20 : 20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: isLogin ? 20 : -20 }}
               transition={{ duration: 0.3 }}
               className="bg-[#0f1a2e]/50 backdrop-blur-md p-8 rounded-2xl border border-[#78a0ff]/20"
             >
-              {isLogin ? (
-                <div className="space-y-6">
+              {needsVerification ? (
+                <form onSubmit={handleVerify} className="space-y-6">
+                  <div className="text-center mb-6">
+                    <h3 className="text-xl font-bold text-white mb-2">Check Your Email</h3>
+                    <p className="text-[#a0b0d0] text-sm">
+                      We've sent a verification code to <span className="text-[#78a0ff]">{email}</span>
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-[#a0b0d0] mb-2 text-sm font-medium">
+                      Verification Code
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="000000"
+                      value={verificationCode}
+                      onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      maxLength={6}
+                      autoFocus
+                      className="w-full px-4 py-3 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-white placeholder-[#a0b0d0]/50 focus:border-[#78a0ff] focus:outline-none focus:ring-2 focus:ring-[#78a0ff]/20 transition-all tracking-widest text-center text-2xl"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={isLoading || verificationCode.length !== 6}
+                    className="w-full py-4 bg-[#78a0ff] hover:bg-[#5c8be6] text-white font-bold rounded-xl transition-all duration-300 shadow-[0_4px_20px_rgba(120,160,255,0.3)] hover:shadow-[0_6px_30px_rgba(120,160,255,0.5)] hover:translate-y-[-2px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
+                  >
+                    {isLoading ? 'Verifying...' : 'Verify Email'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNeedsVerification(false)
+                      setVerificationCode('')
+                      setError('')
+                      setDebugInfo('')
+                    }}
+                    className="w-full py-2 text-[#a0b0d0] hover:text-white transition-all text-sm"
+                  >
+                    ← Back to Sign Up
+                  </button>
+                </form>
+              ) : isLogin ? (
+                <form onSubmit={handleLogin} className="space-y-6">
                   <div>
                     <label className="block text-[#a0b0d0] mb-2 text-sm font-medium">Email</label>
                     <input
@@ -210,6 +392,7 @@ const handleVerify = async () => {
                       placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      required
                       className="w-full px-4 py-3 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-white placeholder-[#a0b0d0]/50 focus:border-[#78a0ff] focus:outline-none focus:ring-2 focus:ring-[#78a0ff]/20 transition-all"
                     />
                   </div>
@@ -221,6 +404,7 @@ const handleVerify = async () => {
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      required
                       className="w-full px-4 py-3 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-white placeholder-[#a0b0d0]/50 focus:border-[#78a0ff] focus:outline-none focus:ring-2 focus:ring-[#78a0ff]/20 transition-all"
                     />
                   </div>
@@ -234,10 +418,11 @@ const handleVerify = async () => {
                   </div>
 
                   <button
-                    onClick={handleLogin}
-                    className="w-full py-4 bg-[#78a0ff] hover:bg-[#5c8be6] text-white font-bold rounded-xl transition-all duration-300 shadow-[0_4px_20px_rgba(120,160,255,0.3)] hover:shadow-[0_6px_30px_rgba(120,160,255,0.5)] hover:translate-y-[-2px]"
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-4 bg-[#78a0ff] hover:bg-[#5c8be6] text-white font-bold rounded-xl transition-all duration-300 shadow-[0_4px_20px_rgba(120,160,255,0.3)] hover:shadow-[0_6px_30px_rgba(120,160,255,0.5)] hover:translate-y-[-2px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                   >
-                    Sign In
+                    {isLoading ? 'Signing In...' : 'Sign In'}
                   </button>
 
                   <div className="relative my-6">
@@ -253,6 +438,7 @@ const handleVerify = async () => {
                     {['Google', 'GitHub', 'Apple'].map((provider) => (
                       <button
                         key={provider}
+                        type="button"
                         onClick={() => oauthLogin(OAUTH_PROVIDERS[provider])}
                         className="py-3 px-4 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-[#a0b0d0] hover:border-[#78a0ff] hover:text-white transition-all duration-300 text-sm font-medium"
                       >
@@ -260,9 +446,9 @@ const handleVerify = async () => {
                       </button>
                     ))}
                   </div>
-                </div>
+                </form>
               ) : (
-                <div className="space-y-6">
+                <form onSubmit={handleSignup} className="space-y-6">
                   <div>
                     <label className="block text-[#a0b0d0] mb-2 text-sm font-medium">Full Name</label>
                     <input
@@ -270,6 +456,7 @@ const handleVerify = async () => {
                       placeholder="John Doe"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
+                      required
                       className="w-full px-4 py-3 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-white placeholder-[#a0b0d0]/50 focus:border-[#78a0ff] focus:outline-none focus:ring-2 focus:ring-[#78a0ff]/20 transition-all"
                     />
                   </div>
@@ -281,6 +468,7 @@ const handleVerify = async () => {
                       placeholder="you@example.com"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      required
                       className="w-full px-4 py-3 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-white placeholder-[#a0b0d0]/50 focus:border-[#78a0ff] focus:outline-none focus:ring-2 focus:ring-[#78a0ff]/20 transition-all"
                     />
                   </div>
@@ -292,44 +480,24 @@ const handleVerify = async () => {
                       placeholder="••••••••"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
+                      required
+                      minLength={8}
                       className="w-full px-4 py-3 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-white placeholder-[#a0b0d0]/50 focus:border-[#78a0ff] focus:outline-none focus:ring-2 focus:ring-[#78a0ff]/20 transition-all"
                     />
                   </div>
 
                   <label className="flex items-start text-[#a0b0d0] text-sm cursor-pointer">
-                    <input type="checkbox" className="mr-2 mt-1 accent-[#78a0ff]" />
+                    <input type="checkbox" required className="mr-2 mt-1 accent-[#78a0ff]" />
                     <span>I agree to the <a href="#" className="text-[#78a0ff] hover:underline">Terms of Service</a> and <a href="#" className="text-[#78a0ff] hover:underline">Privacy Policy</a></span>
                   </label>
 
                   <button 
-                    onClick={handleSignup}
-                    className="w-full py-4 bg-[#78a0ff] hover:bg-[#5c8be6] text-white font-bold rounded-xl transition-all duration-300 shadow-[0_4px_20px_rgba(120,160,255,0.3)] hover:shadow-[0_6px_30px_rgba(120,160,255,0.5)] hover:translate-y-[-2px]"
+                    type="submit"
+                    disabled={isLoading}
+                    className="w-full py-4 bg-[#78a0ff] hover:bg-[#5c8be6] text-white font-bold rounded-xl transition-all duration-300 shadow-[0_4px_20px_rgba(120,160,255,0.3)] hover:shadow-[0_6px_30px_rgba(120,160,255,0.5)] hover:translate-y-[-2px] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                   >
-                    Create Account
+                    {isLoading ? 'Creating Account...' : 'Create Account'}
                   </button>
-                  {needsVerification && (
-  <div className="mt-6 space-y-4">
-    <label className="block text-[#a0b0d0] text-sm font-medium">
-      Email Verification Code
-    </label>
-
-    <input
-      type="text"
-      placeholder="Enter the 6-digit code"
-      value={verificationCode}
-      onChange={(e) => setVerificationCode(e.target.value)}
-      className="w-full px-4 py-3 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-white tracking-widest text-center"
-    />
-
-    <button
-      onClick={handleVerify}
-      className="w-full py-3 bg-[#78a0ff] hover:bg-[#5c8be6] text-white font-bold rounded-xl transition-all"
-    >
-      Verify Email
-    </button>
-  </div>
-)}
-
 
                   <div className="relative my-6">
                     <div className="absolute inset-0 flex items-center">
@@ -344,6 +512,7 @@ const handleVerify = async () => {
                     {['Google', 'GitHub', 'Apple'].map((provider) => (
                       <button
                         key={provider}
+                        type="button"
                         onClick={() => oauthLogin(OAUTH_PROVIDERS[provider])}
                         className="py-3 px-4 bg-[#010514] border border-[#78a0ff]/30 rounded-xl text-[#a0b0d0] hover:border-[#78a0ff] hover:text-white transition-all duration-300 text-sm font-medium"
                       >
@@ -351,7 +520,7 @@ const handleVerify = async () => {
                       </button>
                     ))}
                   </div>
-                </div>
+                </form>
               )}
             </motion.div>
           </AnimatePresence>
