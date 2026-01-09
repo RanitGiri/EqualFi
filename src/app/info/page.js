@@ -248,7 +248,7 @@ const Info = () => {
                   </div>
                   {isOpen.consistency && (
                     <div className="absolute z-50 w-full mt-2 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-                      {['High – Weekly', 'Medium – Irregular', 'Low – Sporadic'].map((opt) => (
+                      {['High–Consistent', 'Medium–Variable', 'Low–Unpredictable'].map((opt) => (
                         <div 
                           key={opt}
                           onClick={() => selectOption('incomeConsistency', opt)}
