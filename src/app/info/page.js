@@ -128,7 +128,7 @@ const Info = () => {
         monthly_income_avg: parseFloat(data.monthlyIncome) || 0,
         income_frequency: data.incomeConsistency,
         monthly_rent: parseFloat(data.rent) || 0,
-        monthly_utilities: parseFloat(data.utilities) || 0,
+        monthly_utilities: (parseFloat(data.utilities) || 0) + (parseFloat(data.emi) || 0) + (parseFloat(data.insurance) || 0),
         missed_payments_count: parseInt(data.missedPayments) || 0
       };
 
@@ -259,7 +259,7 @@ const Info = () => {
                   </div>
                   {isOpen.consistency && (
                     <div className="absolute z-50 w-full mt-2 bg-slate-900/90 backdrop-blur-xl border border-white/10 rounded-xl overflow-hidden shadow-2xl">
-                      {['High–Consistent', 'Medium–Variable', 'Low–Unpredictable'].map((opt) => (
+                      {['High – Consistent', 'Medium – Variable', 'Low – Unpredictable'].map((opt) => (
                         <div 
                           key={opt}
                           onClick={() => selectOption('incomeConsistency', opt)}
