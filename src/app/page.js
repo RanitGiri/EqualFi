@@ -33,7 +33,7 @@ export default function Home() {
     applicationCategory: "FinanceApplication",
     operatingSystem: "Web",
     description:
-      "EqualFi is a fintech platform for fair and intelligent financial management.",
+      "EqualFi is a financial intelligence platform designed to evaluate credit profiles and provide loan eligibility insights in a secure and transparent manner.",
   })}
 </Script>
 
