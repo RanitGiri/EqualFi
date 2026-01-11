@@ -119,7 +119,7 @@ function Footer() {
           >
             {/* Main Logo */}
             <h1 
-              className="text-[8rem] md:text-[12rem] lg:text-[16rem] font-black tracking-tighter leading-none relative"
+              className="text-[4rem] md:text-[12rem] lg:text-[16rem] font-black tracking-tighter leading-none relative"
               style={{ 
                 fontFamily: 'Orbitron, sans-serif',
                 background: 'linear-gradient(180deg, #78a0ff 0%, #4d7fd9 50%, #2d5a8f 100%)',
@@ -147,7 +147,7 @@ function Footer() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.5, delay: 0.7 }}
-              className="mt-8 text-[#a0b0d0] text-xl font-light tracking-wide"
+              className="mt-8 text-[#a0b0d0] text-md md:text-xl font-light tracking-wide"
             >
               Equal Access to Financial Opportunities
             </motion.p>

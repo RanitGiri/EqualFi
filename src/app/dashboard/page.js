@@ -116,7 +116,19 @@ function Dashboard() {
       {/* Header */}
       <div className="max-w-7xl mx-auto mb-8 relative z-10">
         <div className="flex items-center justify-between mb-2">
-          <h1 className="text-4xl font-black text-blue-400 tracking-tighter">EQUALFI</h1>
+          <button
+                        
+                        className="text-3xl font-black tracking-tighter cursor-pointer relative"
+                        style={{ 
+                          fontFamily: 'Orbitron, sans-serif',
+                          background: 'linear-gradient(180deg, #78a0ff 0%, #4d7fd9 50%, #2d5a8f 100%)',
+                          WebkitBackgroundClip: 'text',
+                          WebkitTextFillColor: 'transparent',
+                          textShadow: '0 0 80px rgba(120,160,255,0.5)',
+                        }}
+                      >
+                        EQUALFI
+                      </button>
           <div className="flex items-center gap-6">
   {/* User Info */}
   <div className="flex items-center gap-4">
