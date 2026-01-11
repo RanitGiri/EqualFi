@@ -89,10 +89,17 @@ const Info = () => {
       //   body: JSON.stringify({ userId: user.id, ...profileData })
       // })
       //tablename: 'user_profiles_equalfi'
-      const formFieldsAsArray = Object.entries(formData).map(([key, value]) => [
-        key, 
-        String(value) // Ensure we only send strings to the contract
-      ]);
+
+
+      const allowedFields = [
+        'persona', 'bankAge', 'incomeSource', 'monthlyIncome', 
+        'incomeConsistency', 'evaluationDate', 'rent', 
+        'utilities', 'emi', 'insurance', 'missedPayments'
+      ];
+
+      const formFieldsAsArray = Object.entries(formData)
+        .filter(([key]) => allowedFields.includes(key))
+        .map(([key, value]) => [key, String(value)]);
 
       
 
