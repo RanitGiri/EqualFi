@@ -72,13 +72,13 @@ function Footer() {
               <div className="p-2 rounded-lg bg-[#78a0ff]/10">
                 <Mail className="w-5 h-5 text-[#78a0ff]" />
               </div>
-              <span>contact@equalfi.com</span>
+              <span>contact.equalfi@gmail.com</span>
             </div>
             <div className="flex items-center gap-3 text-[#a0b0d0]">
               <div className="p-2 rounded-lg bg-[#78a0ff]/10">
                 <Phone className="w-5 h-5 text-[#78a0ff]" />
               </div>
-              <span>+91 (800) 123-4567</span>
+              <span>+91 8637329216 </span>
             </div>
             <div className="flex items-center gap-3 text-[#a0b0d0]">
               <div className="p-2 rounded-lg bg-[#78a0ff]/10">
